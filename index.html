@@ -70,6 +70,20 @@
                 overflow-y: hidden;
                 resize: none;
             }
+            .entnr {
+                border: 1px solid white;
+                border-radius: 0.5em;
+                /* background-color: rgb(0, 0, 112); */
+                background-color: chartreuse;
+                color: black;
+                font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+                font-size: 18px;
+                font-weight: bold;
+                width: 95%;
+                margin: auto;
+                overflow-y: hidden;
+                resize: none;
+            }
             #content {
                 display: none;
                 width: 95%;
@@ -180,7 +194,6 @@
                             return;
                         }
                         translation_response = response;
-                        //translation = JSON.parse(response);
                         phraseDiv.value = response[0].translations[0].text;
                         var dim = getTextWidth(phraseDiv);
                         phraseDiv.style.height = ((Math.ceil(dim.width / (phraseDiv.clientWidth * 0.8822520131771596)) + 2) * 18.5625).toString() + "px";
@@ -198,7 +211,6 @@
                 });
             }
             function getTextWidth(ele) {
-                // re-use canvas object for better performance
                 const canvas = getTextWidth.canvas || (getTextWidth.canvas = document.createElement("canvas"));
                 canvas.width = ele.clientWidth;
                 const context = canvas.getContext("2d");
@@ -221,26 +233,65 @@
             }
             var cancel;
             var mic_check;
+            var detectedLanguage = "";
+            var autoDetectSourceLanguageConfig;
+            var recognizing_event;
+            var recognizing_lid;
             function newRecognizer(){
                 speechConfig = SpeechSDK.SpeechConfig.fromSubscription(subscriptionKey, serviceRegion);
+                speechConfig.setProperty(SpeechSDK.PropertyId.SpeechServiceConnection_LanguageIdMode, "Continuous");
                 speechConfig.setProfanity(SpeechSDK.ProfanityOption.Raw);
-                speechConfig.speechRecognitionLanguage = "zh-CN";
+                //speechConfig.speechRecognitionLanguage = "zh-CN";
                 //speechConfig.speechRecognitionLanguage = "en-US";
                 audioConfig  = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
-                recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+                autoDetectSourceLanguageConfig = SpeechSDK.AutoDetectSourceLanguageConfig.fromLanguages(["en-US", "zh-CN"]);
+                recognizer = SpeechSDK.SpeechRecognizer.FromConfig(speechConfig, autoDetectSourceLanguageConfig, audioConfig);
+                //recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
                 recognizer.recognized = (s, e)=>{
                     if(e.result.reason == SpeechSDK.ResultReason.RecognizedSpeech){
                         if(e.result.text != ""){
+                            var languageDetectionResult = SpeechSDK.AutoDetectSourceLanguageResult.fromResult(e.result);
+                            detectedLanguage = languageDetectionResult.language;
                             recognized_event = e;
+                            console.log(detectedLanguage);
+                            if(detectedLanguage == "zh-CN"){
+                                getTranslation(e.result.text,true);
+                            } else {
+                                phraseDiv.classList.remove("cntnr");
+                                phraseDiv.classList.add("entnr");
+                                phraseDiv.value = e.result.text;
+                                var dim = getTextWidth(phraseDiv);
+                                phraseDiv.style.height = ((Math.ceil(dim.width / (phraseDiv.clientWidth * 0.8822520131771596)) + 2) * 18.5625).toString() + "px";
+                                document.scrollingElement.scrollTo(0,document.body.scrollHeight);
+                                pditer++;
+                                var new_ta = document.createElement("textarea");
+                                new_ta.id = "pd" + pditer.toString();
+                                new_ta.classList.add("cntnr");
+                                new_ta.setAttribute("spellcheck",false);
+                                document.getElementById("content").appendChild(new_ta);
+                                phraseDiv = document.getElementById("pd" + pditer.toString());
+                            }
                             console.log(`RECOGNIZED: Text=${e.result.text}`);
-                            getTranslation(e.result.text,true);
                         }
                     }
                 };
                 recognizer.recognizing = (s, e) => {
                     if(e.result.text != ""){
+                        recognizing_event = e;
+                        recognizing_lid = SpeechSDK.AutoDetectSourceLanguageResult.fromResult(e.result);
+                        detectedLanguage = recognizing_lid.language;
+                        console.log(detectedLanguage);
+                        if(detectedLanguage == "zh-CN"){
+                            getTranslation(e.result.text,false);
+                        } else {
+                            phraseDiv.classList.remove("cntnr");
+                            phraseDiv.classList.add("entnr");
+                            phraseDiv.value = e.result.text;
+                            var dim = getTextWidth(phraseDiv);
+                            phraseDiv.style.height = ((Math.ceil(dim.width / (phraseDiv.clientWidth * 0.8822520131771596)) + 2) * 18.5625).toString() + "px";
+                            document.scrollingElement.scrollTo(0,document.body.scrollHeight);
+                        }
                         console.log(`RECOGNIZING: Text=${e.result.text}`);
-                        getTranslation(e.result.text,false);
                     }
                 };
                 recognizer.canceled = (s, e) => {
@@ -274,34 +325,6 @@
                     });
                 },1000);
             }
-            /*
-https://api-nam.cognitive.microsofttranslator.com
-
-// Pass secret key and region using headers to a custom endpoint
-curl -X POST "https://my-swiss-n.cognitiveservices.azure.com/translator/text/v3.0/translate?to=fr" \
--H "Ocp-Apim-Subscription-Key: xxx" \
--H "Ocp-Apim-Subscription-Region: switzerlandnorth" \
--H "Content-Type: application/json" \
--d "[{'Text':'顯然，您的主要目標是避免監禁。'}]" -v
-
-$Body = "[{'Text':'顯然，您的主要目標是避免監禁。'}]"
-$OcpApimKey = "3894bff285d848658c149f65cb31d109"
-$OcpApimReg = "eastus"
-$ContentType = "application/json"
-$uri = "https://en-to-zh.cognitiveservices.azure.com/translator/text/v3.0/translate?to=en"
-$headers = [ordered]@{
-    "Ocp-Apim-Subscription-Key"=$OcpApimKey;
-    "Ocp-Apim-Subscription-Region"=$OcpApimReg;
-}
-$r = [Execute.HttpRequest]::Send(
-    $Uri,
-    [System.Net.Http.HttpMethod]::Post,
-    $Headers,
-    $null,
-    $ContentType,
-    $Body
-)
-            */
             function beginSTT(){
                 document.body.style.backgroundColor = "rgb(0, 0, 112)";
                 document.getElementById("begin").style.display = "none";
@@ -311,55 +334,6 @@ $r = [Execute.HttpRequest]::Send(
                 phraseDiv.innerHTML = "";
                 document.getElementById('content').style.display = 'block';
                 newRecognizer();
-                // speechConfig = SpeechSDK.SpeechConfig.fromSubscription(subscriptionKey, serviceRegion);
-                // speechConfig.setProfanity(SpeechSDK.ProfanityOption.Raw);
-                // //speechConfig.speechRecognitionLanguage = "zh-HK";
-                // speechConfig.speechRecognitionLanguage = "en-US";
-                // audioConfig  = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
-                // recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
-                // recognizer.recognized = (s, e)=>{
-                //     if(e.result.reason == SpeechSDK.ResultReason.RecognizedSpeech){
-                //         if(e.result.text != ""){
-                //             recognized_event = e;
-                //             console.log(`RECOGNIZED: Text=${e.result.text}`);
-                //             phraseDiv.value = e.result.text;
-                //             var dim = getTextWidth(phraseDiv);
-                //             phraseDiv.style.height = ((Math.ceil(dim.width / phraseDiv.clientWidth) + 2) * 18.5625).toString() + "px";
-                //             document.scrollingElement.scrollTo(0,document.body.scrollHeight);
-                //             pditer++
-                //             var new_ta = document.createElement("textarea");
-                //             new_ta.id = "pd" + pditer.toString();
-                //             new_ta.classList.add("cntnr");
-                //             new_ta.setAttribute("spellcheck",false);
-                //             document.getElementById("content").appendChild(new_ta);
-                //             phraseDiv = document.getElementById("pd" + pditer.toString());
-                //         }
-                //     }
-                // };
-                // recognizer.recognizing = (s, e) => {
-                //     phraseDiv.value = e.result.text;
-                //     var dim = getTextWidth(phraseDiv);
-                //     phraseDiv.style.height = ((Math.ceil(dim.width / phraseDiv.clientWidth) + 2) * 18.5625).toString() + "px";
-                //     document.scrollingElement.scrollTo(0,document.body.scrollHeight);
-                //     console.log(`RECOGNIZING: Text=${e.result.text}`);
-                // };
-                // recognizer.canceled = (s, e) => {
-                //     cancel = e;
-                //     console.log(`CANCELED: Reason=${e.reason}`);
-                //     if (e.reason == sdk.CancellationReason.Error) {
-                //         console.log(`"CANCELED: ErrorCode=${e.errorCode}`);
-                //         console.log(`"CANCELED: ErrorDetails=${e.errorDetails}`);
-                //         console.log("CANCELED: Did you set the speech resource key and region values?");
-                //     }
-                //     recognizer.stopContinuousRecognitionAsync();
-                //     newRecognizer();
-                // };
-                // recognizer.sessionStopped = (s, e) => {
-                //     console.log("\n    Session stopped event.");
-                //     recognizer.stopContinuousRecognitionAsync();
-                //     newRecognizer();
-                // };
-                // recognizer.startContinuousRecognitionAsync();
             }
             document.addEventListener("DOMContentLoaded",()=>{
                 document.body.addEventListener("keydown",(e)=>{
@@ -389,12 +363,10 @@ $r = [Execute.HttpRequest]::Send(
             <div style="height: 10%;"></div>
             <table id="keys">
                 <tr>
-                    <!-- <label for="azspeech"></label> -->
                     <td><a class="key" href="https://azure.microsoft.com/en-us/products/cognitive-services/speech-services/" target="_blank">Azure Cognitive Services Speech API Key</a></td>
                     <td><input tabindex="0" type="username" name="azspeech" id="azspeech"></td>
                 </tr>
                 <tr>
-                    <!-- <label for="translate"></label> -->
                     <td><a class="key" href="https://azure.microsoft.com/en-us/products/cognitive-services/Translator/" target="_blank">Azure Cognitive Services Translate API Key</a></td>
                     <td><input tabindex="1" type="password" name="translate" id="translate"></td>
                 </tr>
@@ -411,7 +383,6 @@ $r = [Execute.HttpRequest]::Send(
             </a>
         </div>
         <div id="content">
-            <!-- <button id="startRecognizeOnceAsyncButton">Start recognition</button> -->
             <textarea class="cntnr" id="pd0" spellcheck="false" onresize></textarea>
         </div>
     </body>
