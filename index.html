@@ -194,6 +194,12 @@
                             return;
                         }
                         translation_response = response;
+                        if(!phraseDiv.classList.contains("cntnr")){
+                            phraseDiv.classList.add("cntnr");
+                        }
+                        if(phraseDiv.classList.contains("entnr")){
+                            phraseDiv.classList.remove("entnr");
+                        }
                         phraseDiv.value = response[0].translations[0].text;
                         var dim = getTextWidth(phraseDiv);
                         phraseDiv.style.height = ((Math.ceil(dim.width / (phraseDiv.clientWidth * 0.8822520131771596)) + 2) * 18.5625).toString() + "px";
@@ -232,15 +238,20 @@
                 x.style.height = ((Math.ceil(dim.width / (x.clientWidth * 0.8822520131771596)) + 2) * 18.5625).toString() + "px";
             }
             var cancel;
+            var mic_check_interval;
             var mic_check;
-            var detectedLanguage = "";
+            var detectedLanguage;
             var autoDetectSourceLanguageConfig;
             var recognizing_event;
             var recognizing_lid;
             function newRecognizer(){
-                speechConfig = SpeechSDK.SpeechConfig.fromSubscription(subscriptionKey, serviceRegion);
+                var v2EndpointInString = "wss://eastus.stt.speech.microsoft.com/speech/universal/v2";
+                var v2EndpointUrl = new URL(v2EndpointInString);
+                speechConfig = SpeechSDK.SpeechConfig.fromEndpoint(v2EndpointUrl, subscriptionKey);
+                //speechConfig = SpeechSDK.SpeechConfig.fromSubscription(subscriptionKey, serviceRegion);
                 speechConfig.setProperty(SpeechSDK.PropertyId.SpeechServiceConnection_LanguageIdMode, "Continuous");
                 speechConfig.setProfanity(SpeechSDK.ProfanityOption.Raw);
+                speechConfig.outputFormat = SpeechSDK.OutputFormat.Detailed;
                 //speechConfig.speechRecognitionLanguage = "zh-CN";
                 //speechConfig.speechRecognitionLanguage = "en-US";
                 audioConfig  = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
@@ -278,25 +289,40 @@
                 recognizer.recognizing = (s, e) => {
                     if(e.result.text != ""){
                         recognizing_event = e;
-                        recognizing_lid = SpeechSDK.AutoDetectSourceLanguageResult.fromResult(e.result);
-                        detectedLanguage = recognizing_lid.language;
-                        console.log(detectedLanguage);
-                        if(detectedLanguage == "zh-CN"){
-                            getTranslation(e.result.text,false);
+                        //recognizing_lid = SpeechSDK.AutoDetectSourceLanguageResult.fromResult(e.result);
+                        //detectedLanguage = recognizing_lid.language;
+                        //detectedLanguage = e.result.language;
+                        console.log(e.result.language);
+                        if(typeof(detectedLanguage) == 'undefined'){
+                            if(e.result.language == "zh-CN"){
+                                getTranslation(e.result.text,false);
+                            } else {
+                                phraseDiv.classList.remove("cntnr");
+                                phraseDiv.classList.add("entnr");
+                                phraseDiv.value = e.result.text;
+                                var dim = getTextWidth(phraseDiv);
+                                phraseDiv.style.height = ((Math.ceil(dim.width / (phraseDiv.clientWidth * 0.8822520131771596)) + 2) * 18.5625).toString() + "px";
+                                document.scrollingElement.scrollTo(0,document.body.scrollHeight);
+                            }
                         } else {
-                            phraseDiv.classList.remove("cntnr");
-                            phraseDiv.classList.add("entnr");
-                            phraseDiv.value = e.result.text;
-                            var dim = getTextWidth(phraseDiv);
-                            phraseDiv.style.height = ((Math.ceil(dim.width / (phraseDiv.clientWidth * 0.8822520131771596)) + 2) * 18.5625).toString() + "px";
-                            document.scrollingElement.scrollTo(0,document.body.scrollHeight);
+                            if(detectedLanguage == "zh-CN"){
+                                getTranslation(e.result.text,false);
+                            } else {
+                                phraseDiv.classList.remove("cntnr");
+                                phraseDiv.classList.add("entnr");
+                                phraseDiv.value = e.result.text;
+                                var dim = getTextWidth(phraseDiv);
+                                phraseDiv.style.height = ((Math.ceil(dim.width / (phraseDiv.clientWidth * 0.8822520131771596)) + 2) * 18.5625).toString() + "px";
+                                document.scrollingElement.scrollTo(0,document.body.scrollHeight);
+                            }
                         }
+
                         console.log(`RECOGNIZING: Text=${e.result.text}`);
                     }
                 };
                 recognizer.canceled = (s, e) => {
                     cancel = e;
-                    console.log(`CANCELED: Reason=${e.reason}`);
+                    console.log(`CANCELED: Reason=${e.errorDetails}`);
                     if (e.reason == sdk.CancellationReason.Error) {
                         console.log(`"CANCELED: ErrorCode=${e.errorCode}`);
                         console.log(`"CANCELED: ErrorDetails=${e.errorDetails}`);
@@ -304,21 +330,22 @@
                     }
                     recognizer.stopContinuousRecognitionAsync();
                     newRecognizer();
+                    console.log(mic_check);
                 };
                 recognizer.sessionStopped = (s, e) => {
                     console.log("\n    Session stopped event.");
                     recognizer.stopContinuousRecognitionAsync();
                     newRecognizer();
                 };
+                clearInterval(mic_check_interval);
                 recognizer.startContinuousRecognitionAsync();
-                if(typeof(mic_check) != 'undefined'){
-                    clearInterval(mic_check);
-                }
-                mic_check = setInterval(()=>{
+                mic_check_interval = setInterval(()=>{
                     navigator.mediaDevices.getUserMedia({video: false, audio: true}).then((p)=>{
                         if(p.active){
+                            mic_check = true;
                             return;
                         } else {
+                            mic_check = false;
                             recognizer.stopContinuousRecognitionAsync();
                             newRecognizer();
                         }
